@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
+
+	"agentflow/internal/forkconfig"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -42,7 +44,7 @@ var onDemandInstallMu sync.Mutex
 func onDemandCLICatalog() map[string]onDemandCLI {
 	return map[string]onDemandCLI{
 		"codex":       {Engine: "codex", Binary: "codex", Package: "@openai/codex", Bundled: true},
-		"codebuddy":   {Engine: "codebuddy", Binary: "codebuddy", Package: "@tencent-ai/codebuddy-code", Bundled: true},
+		"codebuddy":   {Engine: "codebuddy", Binary: "codebuddy", Package: "@tencent-ai/codebuddy-code", Bundled: codeBuddyBundledInImage()},
 		"claude-code": {Engine: "claude-code", Binary: "claude"},
 		"opencode":    {Engine: "opencode", Binary: "opencode", Package: "opencode-ai"},
 		"cursor":      {Engine: "cursor", Binary: "cursor-agent", Script: cursorInstallScript},
@@ -55,6 +57,17 @@ func onDemandCLICatalog() map[string]onDemandCLI {
 
 // OnDemandInstallable reports whether a failed conversation may offer to
 // install this CLI. The set is the chat executors, not a caller-supplied name.
+// codeBuddyBundledInImage reports whether the platform image already contains
+// codebuddy. The self-hosted image skips that package unless the image was
+// built with LOOPFORGE_INSTALL_CODEBUDDY=1, in which case a missing binary
+// can still be installed on demand.
+func codeBuddyBundledInImage() bool {
+	if os.Getenv("LOOPFORGE_INSTALL_CODEBUDDY") == "1" {
+		return true
+	}
+	return !forkconfig.SelfHosted()
+}
+
 func OnDemandInstallable(engine string) bool {
 	_, ok := onDemandCLICatalog()[engine]
 	return ok

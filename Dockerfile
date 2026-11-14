@@ -28,9 +28,17 @@ RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache
 COPY --from=chatbot /src/web/native-chat/ web/native-chat/
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build GOOS=${TARGETOS} GOARCH=${TARGETARCH} bash scripts/build-binaries.sh --platform /out
 FROM node:22-bookworm
+# LOOPFORGE_INSTALL_CODEBUDDY=1 restores the upstream image, which also
+# installs @tencent-ai/codebuddy-code. Claude Code stays on-demand
+# (EnsureClaudeCode) because its license does not allow bundling it here.
+ARG LOOPFORGE_INSTALL_CODEBUDDY=0
 RUN --mount=type=cache,target=/root/.npm apt-get update && apt-get install -y --no-install-recommends ca-certificates git openssh-client bash curl python3 ripgrep \
  && rm -rf /var/lib/apt/lists/* \
- && npm install -g @openai/codex@0.162.1 @tencent-ai/codebuddy-code@2.167.0 @deepseek-ai/dsh@0.2.2-rc.1
+ && if [ "$LOOPFORGE_INSTALL_CODEBUDDY" = "1" ]; then \
+      npm install -g @openai/codex@0.162.1 @tencent-ai/codebuddy-code@2.167.0 @deepseek-ai/dsh@0.2.2-rc.1; \
+    else \
+      npm install -g @openai/codex@0.162.1 @deepseek-ai/dsh@0.2.2-rc.1 ; \
+    fi
 # A relocatable Python that sandboxes of images without python3 mount for the
 # native CLI hooks (internal/runtime/toolchain.go). Its terminfo database has
 # names differing only in case, which a case-insensitive data directory (macOS)
@@ -57,7 +65,11 @@ WORKDIR /app
 COPY --from=build /out/ /app/bin/
 COPY LICENSE THIRD_PARTY_NOTICES.md /app/
 COPY third_party/go/ /app/third_party/go/
-ENV PATH="/app/bin:${PATH}"
+ENV PATH="/app/bin:${PATH}" \
+    DISABLE_TELEMETRY=1 \
+    DO_NOT_TRACK=1 \
+    CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 \
+    CODEX_DISABLE_TELEMETRY=1
 # An explicit LOOPFORGE_COMMIT wins. Otherwise read HEAD from the build context
 # so `docker build` stamps the same corner label as the release workflow.
 ARG LOOPFORGE_COMMIT=

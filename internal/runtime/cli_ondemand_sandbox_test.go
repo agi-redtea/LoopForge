@@ -64,6 +64,21 @@ func TestDockerSandboxOnDemandCLIPathSkipsWithoutInstalling(t *testing.T) {
 	}
 }
 
+func TestSelfHostedImageDoesNotBundleCodeBuddy(t *testing.T) {
+	t.Setenv("AGENTFLOW_SELF_HOSTED", "1")
+	t.Setenv("LOOPFORGE_INSTALL_CODEBUDDY", "")
+	if onDemandCLICatalog()["codebuddy"].Bundled {
+		t.Fatal("self-hosted image should install codebuddy on demand")
+	}
+	if onDemandCLICatalog()["claude-code"].Bundled {
+		t.Fatal("claude-code stays on demand")
+	}
+	t.Setenv("LOOPFORGE_INSTALL_CODEBUDDY", "1")
+	if !onDemandCLICatalog()["codebuddy"].Bundled {
+		t.Fatal("LOOPFORGE_INSTALL_CODEBUDDY=1 marks codebuddy bundled")
+	}
+}
+
 func TestOnDemandCLICatalogMarksBundledCLIs(t *testing.T) {
 	catalog := onDemandCLICatalog()
 	for engine, want := range map[string]bool{

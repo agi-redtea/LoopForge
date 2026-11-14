@@ -892,7 +892,7 @@ func PrebuildIsolatedImage() {
 			return
 		}
 		defer os.RemoveAll(dir)
-		if _, err := ensureDockerImage(ctx, dir, domain.DockerfileDefinition{ID: "isolated", Content: IsolatedDockerfile}); err != nil {
+		if _, err := ensureDockerImage(ctx, dir, domain.DockerfileDefinition{ID: "isolated", Content: effectiveIsolatedDockerfile()}); err != nil {
 			log.Printf("prebuild sandbox image: %v", err)
 		}
 	}()
@@ -908,7 +908,7 @@ func isolateLocalDriver(profile domain.SandboxProfile, dockerfile domain.Dockerf
 	}
 	profile.Driver = "docker"
 	if strings.TrimSpace(dockerfile.Content) == "" {
-		dockerfile = domain.DockerfileDefinition{ID: "generic-backend", Name: "Isolated local sandbox", Content: IsolatedDockerfile}
+		dockerfile = domain.DockerfileDefinition{ID: "generic-backend", Name: "Isolated local sandbox", Content: effectiveIsolatedDockerfile()}
 	}
 	return profile, dockerfile
 }
