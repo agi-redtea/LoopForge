@@ -101,7 +101,7 @@ function scheduleModelAPI(){return window.AgentFlowAssistantModels}
 function selectedClarifyModel(){
   const api=window.AgentFlowAssistantModels;
   const stored=localStorage.getItem('agentflow.clarifyModel')||'';
-  // Clarification runs on CodeBuddy only; a saved "codex:…" id falls back.
+  // Clarification follows the deployment's executors; codeBuddyModel keeps a prefixed id.
   if(api?.codeBuddyModel)return api.codeBuddyModel(stored);
   return stored||(api&&api.DEFAULT)||'default';
 }
@@ -163,7 +163,8 @@ function paintScheduleEngines(selected){
   if(!select)return;
   const current=scheduleModelEngine(selected);
   const engines=scheduleModelAPI()?.catalog?.().engines||[];
-  const list=engines.length?[...engines]:[{id:'codebuddy',name:'CodeBuddy'}];
+  let list=engines.length?[...engines]:[{id:'codebuddy',name:'CodeBuddy'}];
+  if(typeof window!=='undefined'&&window.AgentFlowAssistantModels?.codeBuddyHidden?.())list=list.filter(e=>e.id!=='codebuddy');
   if(!list.some(e=>e.id===current))list.push({id:current,name:current});
   // A CLI without listed models has no key in this account; a saved task
   // keeps its CLI selectable so editing it does not move it elsewhere.

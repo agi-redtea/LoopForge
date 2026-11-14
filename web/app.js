@@ -912,6 +912,7 @@ async function boot(){
   const view=restoredView();
   const shell = await api('/api/bootstrap', {silent: view==='runs'});
   state.data = Object.assign(state.data, shell);
+  window.AgentFlowAssistantModels?.applyForkFeatures?.(shell.features);
   const savedProject=urlParams.get('projectId')||localStorage.getItem('agentflow.activeProject');
   state.projectFilter=(state.data.projects||[]).some(p=>p.id===savedProject)?savedProject:defaultProjectId(state.data.projects);
   state.workflow = clone(restoreOpenWorkflow());
@@ -1488,7 +1489,7 @@ function postNativeChatProject(frame){
 // A project created, deleted or restored from the chat must reach the project
 // switcher without a page refresh.
 function reloadShellProjects(){
-  return api('/api/bootstrap',{silent:true}).then(shell=>{Object.assign(state.data,shell);renderAll();return state.data.projects||[]});
+  return api('/api/bootstrap',{silent:true}).then(shell=>{Object.assign(state.data,shell);window.AgentFlowAssistantModels?.applyForkFeatures?.(shell.features);renderAll();return state.data.projects||[]});
 }
 function mountNativeChat(){
   const frame=$('#chatNextFrame');
