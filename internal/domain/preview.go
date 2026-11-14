@@ -6,6 +6,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"agentflow/internal/forkconfig"
 )
 
 // PreviewID is the stable preview id for a run: one preview per run.
@@ -97,12 +99,9 @@ func (c *PreviewContract) SourceOrDist() string {
 
 func (c *PreviewContract) ExecutorOrCodeBuddy() string {
 	if c == nil {
-		return PreviewBuildExecutor
+		return forkconfig.MapPreviewExecutor("")
 	}
-	if id := strings.TrimSpace(c.ExecutorID); id != "" {
-		return id
-	}
-	return PreviewBuildExecutor
+	return forkconfig.MapPreviewExecutor(c.ExecutorID)
 }
 
 func (c *PreviewContract) ModelOrDefault() string {
@@ -152,7 +151,9 @@ func (c *PreviewContract) Validate() error {
 	if !c.Static() {
 		return fmt.Errorf("frontend preview currently supports static sites only")
 	}
-	if !strings.EqualFold(c.ExecutorID, PreviewBuildExecutor) {
+	switch strings.ToLower(c.ExecutorOrCodeBuddy()) {
+	case "codebuddy", "codex", "claude", "claude-code":
+	default:
 		return fmt.Errorf("frontend preview currently supports CodeBuddy CLI only")
 	}
 	if strings.TrimSpace(c.Model) == "" {

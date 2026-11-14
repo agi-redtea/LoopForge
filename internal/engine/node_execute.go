@@ -2,6 +2,7 @@ package engine
 
 import (
 	"agentflow/internal/domain"
+	"agentflow/internal/forkconfig"
 	"agentflow/internal/gitwork"
 	"agentflow/internal/repo"
 	"agentflow/internal/runtime"
@@ -187,13 +188,14 @@ func (e *Engine) execute(ctx context.Context, runID string) {
 }
 
 func resolveNodeExecutor(st *repo.Store, node domain.WorkflowNode, agent domain.AgentDefinition) (domain.ExecutorDefinition, error) {
-	executorID := agent.ExecutorID
+	executorID := strings.TrimSpace(agent.ExecutorID)
 	if executorID == "" {
-		executorID = node.ExecutorID
+		executorID = strings.TrimSpace(node.ExecutorID)
 	}
 	if executorID == "" {
 		executorID = "codebuddy"
 	}
+	executorID = forkconfig.MapStockExecutor(agent.ID, executorID)
 	ex, found := repo.BuiltInExecutor(executorID)
 	if !found && executorID == "mock" {
 		// The deterministic mock is reserved for internal tests and old run snapshots.

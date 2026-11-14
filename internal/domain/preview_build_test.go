@@ -87,9 +87,15 @@ func TestPreviewContractClampsRetentionTo30Days(t *testing.T) {
 }
 
 func TestPreviewContractRejectsNonCodeBuddy(t *testing.T) {
-	c := &PreviewContract{Enabled: true, ExecutorID: "claude", Model: "x"}
+	c := &PreviewContract{Enabled: true, ExecutorID: "other", Model: "x"}
 	if err := c.Validate(); err == nil {
 		t.Fatal("expected CodeBuddy-only error")
+	}
+	for _, id := range []string{"codebuddy", "codex", "claude", "claude-code"} {
+		okContract := &PreviewContract{Enabled: true, ExecutorID: id, Model: "x"}
+		if err := okContract.Validate(); err != nil {
+			t.Fatalf("%s should be accepted: %v", id, err)
+		}
 	}
 	disabled := &PreviewContract{Enabled: false, ExecutorID: "claude"}
 	if err := disabled.Validate(); err != nil {

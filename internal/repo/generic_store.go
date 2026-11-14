@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"agentflow/internal/domain"
+	"agentflow/internal/forkconfig"
 
 	"gorm.io/gorm"
 )
@@ -250,6 +251,7 @@ func (r *CatalogRepo) GenericAgentByID(id string) (domain.AgentDefinition, bool)
 	for _, template := range r.GenericTemplates() {
 		for _, agent := range template.Agents {
 			if agent.ID == id {
+				agent.ExecutorID = forkconfig.MapStockExecutor(agent.ID, agent.ExecutorID)
 				return agent, true
 			}
 		}

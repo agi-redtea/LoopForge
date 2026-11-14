@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"agentflow/internal/domain"
+	"agentflow/internal/forkconfig"
 
 	"gorm.io/gorm"
 )
@@ -18,7 +19,7 @@ import (
 // BaselineAlignResolverAgent is the shared platform role for scheduled
 // baseline alignment. No project hooks or issue-fix verification gates.
 func BaselineAlignResolverAgent() domain.AgentDefinition {
-	return domain.AgentDefinition{
+	agent := domain.AgentDefinition{
 		ID:          domain.BaselineAlignAgentID,
 		Name:        "基线对齐执行员",
 		Version:     1,
@@ -28,18 +29,28 @@ func BaselineAlignResolverAgent() domain.AgentDefinition {
 		Prompt:      "你只做基线对齐，不是需求修复。\n1. 在当前工作分支执行 git fetch 并 merge 默认分支\n2. 逐块解决冲突，保留双方有效实现；拿不准时选对业务影响更小的一侧并在提交说明里写清\n3. git add 冲突文件并创建合并提交，提交说明列出冲突文件与取舍\n4. 不要 push，不要改默认分支，不要跑项目单测或 E2E，不要写 fix-plan.md / fix-report.md / review-report.md\n5. 结束后用几句话说明每个冲突文件的取舍即可",
 		ExecutorID:  "codebuddy",
 	}
+	agent.ExecutorID = forkconfig.MapStockExecutor(agent.ID, agent.ExecutorID)
+	return agent
 }
 
 // ---------- Agents ----------
 
 func (r *CatalogRepo) Agents() []domain.AgentDefinition {
 	out := payloadList[domain.AgentDefinition](r.DB, "agents", "")
+	for i := range out {
+		out[i].ExecutorID = forkconfig.MapStockExecutor(out[i].ID, out[i].ExecutorID)
+	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out
 }
 
 func (r *CatalogRepo) Agent(id string) (domain.AgentDefinition, bool) {
-	return payloadOne[domain.AgentDefinition](r.DB, "agents", id)
+	agent, ok := payloadOne[domain.AgentDefinition](r.DB, "agents", id)
+	if !ok {
+		return agent, false
+	}
+	agent.ExecutorID = forkconfig.MapStockExecutor(agent.ID, agent.ExecutorID)
+	return agent, true
 }
 
 func (r *CatalogRepo) PutAgent(v domain.AgentDefinition) error {
