@@ -3,6 +3,8 @@ package httpapi
 import (
 	"context"
 	"crypto/sha256"
+
+	"agentflow/internal/forkconfig"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -73,7 +75,7 @@ type skillhubClient struct {
 }
 
 func newSkillhubClientFromEnv() *skillhubClient {
-	return newSkillhubClient(os.Getenv("SKILLHUB_BASE_URL"), os.Getenv("SKILLHUB_API_KEY"))
+	return newSkillhubClient(forkconfig.SkillHubURL(), os.Getenv("SKILLHUB_API_KEY"))
 }
 
 func newSkillhubClient(baseURL, apiKey string) *skillhubClient {
@@ -122,6 +124,9 @@ func skillhubUserKey(id int64, login string) string {
 // get performs one GET (following redirects) and returns at most limit
 // bytes; 429 and 5xx answers are retried once.
 func (c *skillhubClient) get(ctx context.Context, path string, query url.Values, userKey string, timeout time.Duration, limit int64) ([]byte, error) {
+	if !forkconfig.Feature(forkconfig.FeatureSkillHub) {
+		return nil, &skillhubError{Status: http.StatusForbidden, Message: "当前部署已关闭 SkillHub"}
+	}
 	body, err := c.getOnce(ctx, path, query, userKey, timeout, limit)
 	var se *skillhubError
 	if err != nil && errors.As(err, &se) && (se.Upstream == http.StatusTooManyRequests || se.Upstream >= 500) {

@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"agentflow/internal/domain"
+	"agentflow/internal/forkconfig"
 	"agentflow/internal/notification"
 	"agentflow/internal/repo"
 	"errors"
@@ -113,6 +114,10 @@ func (h *notificationHandlers) bot(c *gin.Context) {
 	}
 }
 func (h *notificationHandlers) save(c *gin.Context, old *domain.NotificationBot) {
+	if !forkconfig.Feature(forkconfig.FeatureWeCom) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "当前部署已关闭企业微信通知"})
+		return
+	}
 	var req struct {
 		ProjectID          string  `json:"projectId"`
 		Name               string  `json:"name"`

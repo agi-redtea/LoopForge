@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"agentflow/internal/domain"
+	"agentflow/internal/forkconfig"
 )
 
 // Service orchestrates bidirectional sync between the local store and external
@@ -318,7 +319,7 @@ func (s *Service) PullAll(store IssueStoreAdapter) error {
 			}
 			continue
 		}
-		if repo.Provider != "gongfeng" || repo.GongfengProjectID == "" {
+		if repo.Provider != "gongfeng" || repo.GongfengProjectID == "" || !forkconfig.Feature(forkconfig.FeatureGongfeng) {
 			continue
 		}
 		client, source, err := s.trackerClientForProject("gongfeng", repo.ProjectID)
@@ -333,15 +334,17 @@ func (s *Service) PullAll(store IssueStoreAdapter) error {
 		syncCount += n
 	}
 
-	n, err := s.pullTAPDStories(store)
-	if err != nil {
-		if lastErr == nil {
-			lastErr = err
-		} else {
-			lastErr = fmt.Errorf("%v；%v", lastErr, err)
+	if forkconfig.Feature(forkconfig.FeatureTAPD) {
+		n, err := s.pullTAPDStories(store)
+		if err != nil {
+			if lastErr == nil {
+				lastErr = err
+			} else {
+				lastErr = fmt.Errorf("%v；%v", lastErr, err)
+			}
 		}
+		syncCount += n
 	}
-	syncCount += n
 
 	pruneDuplicateExternalIssues(store)
 	// Delivery transitions belong to the independent MR state sync. A tracker

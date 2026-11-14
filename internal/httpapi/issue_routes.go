@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"agentflow/internal/domain"
+	"agentflow/internal/forkconfig"
 	"agentflow/internal/repo"
 	"crypto/sha256"
 	"errors"
@@ -211,6 +212,10 @@ func (h issuesHandlers) closeIssue(c *gin.Context, issue domain.Issue) {
 }
 
 func (h issuesHandlers) resyncTAPDIssue(c *gin.Context, issue domain.Issue) {
+	if !forkconfig.Feature(forkconfig.FeatureTAPD) {
+		c.JSON(http.StatusForbidden, map[string]string{"error": "当前部署已关闭 TAPD"})
+		return
+	}
 	if issue.Source != "tapd" || issue.ExternalRef == nil || strings.TrimSpace(issue.ExternalRef.ExternalID) == "" {
 		c.JSON(400, map[string]string{"error": "仅 TAPD 来源的需求支持重新同步"})
 		return

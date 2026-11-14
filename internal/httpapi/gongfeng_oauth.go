@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"agentflow/internal/forkconfig"
 	"agentflow/internal/gongfeng"
 
 	"github.com/gin-gonic/gin"
@@ -35,10 +36,14 @@ type gongfengOAuthState struct {
 // gongfengOAuthStatus tells the settings page whether to offer "用工蜂授权".
 // Without a configured Gongfeng application the link only leads to an error.
 func (h *authHandlers) gongfengOAuthStatus(c *gin.Context) {
-	c.JSON(http.StatusOK, map[string]bool{"enabled": gongfeng.ConfigFromEnv().Enabled()})
+	c.JSON(http.StatusOK, map[string]bool{"enabled": forkconfig.Feature(forkconfig.FeatureGongfeng) && gongfeng.ConfigFromEnv().Enabled()})
 }
 
 func (h *authHandlers) gongfengOAuthStart(c *gin.Context) {
+	if !forkconfig.Feature(forkconfig.FeatureGongfeng) {
+		gongfengOAuthPage(c, http.StatusForbidden, "工蜂已关闭", "当前部署已关闭工蜂授权。")
+		return
+	}
 	cfg := gongfeng.ConfigFromEnv()
 	if !cfg.Enabled() {
 		gongfengOAuthPage(c, http.StatusServiceUnavailable, "工蜂授权还没配好", "服务没有配置工蜂应用的 Client ID、Secret 和回调地址。")
@@ -77,6 +82,10 @@ func (h *authHandlers) gongfengOAuthStart(c *gin.Context) {
 }
 
 func (h *authHandlers) gongfengOAuthCallback(c *gin.Context) {
+	if !forkconfig.Feature(forkconfig.FeatureGongfeng) {
+		gongfengOAuthPage(c, http.StatusForbidden, "工蜂已关闭", "当前部署已关闭工蜂授权。")
+		return
+	}
 	cfg := gongfeng.ConfigFromEnv()
 	if !cfg.Enabled() {
 		gongfengOAuthPage(c, http.StatusServiceUnavailable, "工蜂授权还没配好", "服务没有配置工蜂应用。")
