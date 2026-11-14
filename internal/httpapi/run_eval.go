@@ -94,7 +94,7 @@ func (h *runsHandlers) startRunEval(c *gin.Context) {
 		return
 	}
 	user, ok := h.repo.User(current.ID)
-	if !ok || strings.TrimSpace(user.CodeBuddyAPIKey) == "" {
+	if !ok {
 		c.JSON(http.StatusBadRequest, map[string]string{"error": "请先在个人配置中配置自己的 CodeBuddy API Key"})
 		return
 	}
@@ -116,14 +116,14 @@ func (h *runsHandlers) startRunEval(c *gin.Context) {
 	if c.Request.ContentLength > 0 && !decode(c, &req) {
 		return
 	}
-	// Run evals run on CodeBuddy only: refuse a "codex:…" id instead of
-	// silently evaluating with the CodeBuddy default.
-	if engine, _ := assistantModelEngine(req.Model); engine != assistantEngineCodeBuddy {
-		c.JSON(http.StatusBadRequest, map[string]string{"error": "运行评测目前只支持 CodeBuddy 模型，请改选 CodeBuddy 模型"})
+	// CodeBuddy stays the upstream default. Codex and Claude Code run when
+	// that model is selected, or when CodeBuddy is hidden and the user has
+	// that CLI's key. The per-user Base URL is applied inside runAssistantCLI.
+	model, modelErr := resolvePlatformModel(user, req.Model)
+	if modelErr != nil {
+		c.JSON(http.StatusBadRequest, map[string]string{"error": modelErr.Error()})
 		return
 	}
-	catalog := loadAssistantModels(c.Request.Context(), user.CodeBuddyInternetEnvironment)
-	model := assistantAllowedModel(req.Model, catalog)
 	project, _ := h.repo.Project(run.ExecutionContext.ProjectID)
 	rec := domain.RunEvalRecord{
 		ID:        "eval-" + randomID(),
@@ -487,7 +487,8 @@ func (h *runsHandlers) executeRunEval(ctx context.Context, rec domain.RunEvalRec
 	_ = h.repo.PutRunEval(rec)
 	emit("thought", map[string]string{"kind": "thinking", "text": "正在用 " + rec.Model + " 评测…"})
 	system, prompt := runeval.BuildPrompt(rec.Policy, facts)
-	raw, _, err := runAssistantCLI(ctx, assistantCLIRequest{Prompt: prompt, Model: rec.Model, SystemPrompt: system, UserID: user.ID}, user, func(ev assistantStreamEvent) {
+	evalEngine, _ := assistantModelEngine(rec.Model)
+	raw, _, err := runAssistantCLI(ctx, assistantCLIRequest{Prompt: prompt, Model: rec.Model, SystemPrompt: system, UserID: user.ID, ReviewOnly: evalEngine != assistantEngineCodeBuddy}, user, func(ev assistantStreamEvent) {
 		if emit == nil {
 			return
 		}

@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"agentflow/internal/domain"
+	"agentflow/internal/forkconfig"
 	"agentflow/internal/repo"
 	"agentflow/internal/runtime"
 )
@@ -78,6 +79,9 @@ func assistantEngineOptions(user domain.User, sponsored bool) []assistantEngineO
 	engines := append([]string{assistantEngineCodeBuddy}, assistantCLIEngines()...)
 	out := make([]assistantEngineOption, 0, len(engines))
 	for _, engine := range engines {
+		if engine == assistantEngineCodeBuddy && !forkconfig.CodeBuddyEnabled() {
+			continue
+		}
 		key, _ := assistantEngineCredential(user, engine)
 		out = append(out, assistantEngineOption{
 			ID:         engine,
@@ -259,6 +263,14 @@ func (h *assistantHandlers) assistantTurnUser(stored domain.User, model string) 
 	}
 	user, shared, ok := h.assistantChatUser(stored)
 	if !ok {
+		if resolved, err := resolvePlatformModel(stored, model); err == nil {
+			if alt, _ := assistantModelEngine(resolved); alt != assistantEngineCodeBuddy {
+				return stored, resolved, ""
+			}
+		}
+		if !forkconfig.CodeBuddyEnabled() {
+			return stored, "", "请先在个人配置中配置 Codex 或 Claude Code API Key"
+		}
 		return stored, "", "请先在个人配置中配置自己的 CodeBuddy API Key"
 	}
 	if len(shared) > 0 {

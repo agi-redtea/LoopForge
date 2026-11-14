@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"agentflow/internal/domain"
+	"agentflow/internal/forkconfig"
 	"agentflow/internal/notification"
 	"context"
 	"path/filepath"
@@ -13,13 +14,25 @@ func (h *assistantHandlers) generateSOPReport(ctx context.Context, run domain.Ru
 }
 func (h *assistantHandlers) generateReport(ctx context.Context, run domain.Run, model, prompt, system string) (domain.AINotificationContent, error) {
 	user, ok := h.repo.User(run.ExecutionContext.ResponsibleUserID)
-	if !ok || strings.TrimSpace(user.CodeBuddyAPIKey) == "" {
+	if !ok {
 		return domain.AINotificationContent{}, notification.ErrReportCredentials
 	}
-	catalog := loadAssistantModels(ctx, user.CodeBuddyInternetEnvironment)
-	if assistantAllowedModel(model, catalog) != model {
-		return domain.AINotificationContent{}, notification.ErrReportModel
+	if forkconfig.CodeBuddyEnabled() && strings.TrimSpace(user.CodeBuddyAPIKey) != "" {
+		if engine, _ := assistantModelEngine(model); engine == assistantEngineCodeBuddy && model != "" {
+			catalog := loadAssistantModels(ctx, user.CodeBuddyInternetEnvironment)
+			if assistantAllowedModel(model, catalog) != model {
+				return domain.AINotificationContent{}, notification.ErrReportModel
+			}
+		}
 	}
+	resolved, err := resolvePlatformModel(user, model)
+	if err != nil {
+		if strings.Contains(err.Error(), "模型 ID") {
+			return domain.AINotificationContent{}, notification.ErrReportModel
+		}
+		return domain.AINotificationContent{}, notification.ErrReportCredentials
+	}
+	model = resolved
 
 	modelCtx, cancel := context.WithCancel(ctx)
 	defer cancel()

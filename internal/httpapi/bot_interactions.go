@@ -4,6 +4,7 @@ import (
 	"agentflow/internal/botinteraction"
 	"agentflow/internal/domain"
 	"agentflow/internal/engine"
+	"agentflow/internal/forkconfig"
 	"context"
 	"errors"
 	"fmt"
@@ -71,16 +72,23 @@ func (h *assistantHandlers) generateBotReply(ctx context.Context, bot domain.Not
 	if err != nil {
 		return "绑定的平台账号不可用或已失去项目权限，请在平台检查配置。", nil
 	}
-	if strings.TrimSpace(user.CodeBuddyAPIKey) == "" {
-		return "你的平台账号尚未配置 CodeBuddy Key，请在平台个人配置中配置。", nil
-	}
 	model := bot.Model
 	if model == "" {
 		model = domain.DefaultNotificationReportModel
 	}
-	if assistantAllowedModel(model, loadAssistantModels(ctx, user.CodeBuddyInternetEnvironment)) != model {
-		return "所选模型不可用，请在 Bot 管理中重新选择。", nil
+	resolved, resolveErr := resolvePlatformModel(user, model)
+	if resolveErr != nil {
+		if strings.Contains(resolveErr.Error(), "CodeBuddy") {
+			return "你的平台账号尚未配置 CodeBuddy Key，请在平台个人配置中配置。", nil
+		}
+		return "你的平台账号尚未配置可用的执行器 API Key，请在平台个人配置中配置 Codex 或 Claude Code。", nil
 	}
+	if engine, _ := assistantModelEngine(model); engine == assistantEngineCodeBuddy && forkconfig.CodeBuddyEnabled() {
+		if assistantAllowedModel(model, loadAssistantModels(ctx, user.CodeBuddyInternetEnvironment)) != model {
+			return "所选模型不可用，请在 Bot 管理中重新选择。", nil
+		}
+	}
+	model = resolved
 	if err = ensureAssistantSessionDirs(user.ID); err != nil {
 		return "", err
 	}
@@ -139,7 +147,7 @@ func (h *assistantHandlers) generateBotReply(ctx context.Context, bot domain.Not
 					}
 				}
 			}
-			return redactAssistantSecrets(strings.ReplaceAll(reply.Message, user.CodeBuddyAPIKey, "[redacted]"), user), nil
+			return redactAssistantSecrets(redactExecutorSecrets(reply.Message, user), user), nil
 		}
 		if ctx.Err() != nil {
 			return "", ctx.Err()

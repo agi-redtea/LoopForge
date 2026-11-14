@@ -11,5 +11,8 @@ import (
 // them to a real directory shared by every test.
 func TestMain(m *testing.M) {
 	os.Unsetenv("AGENTFLOW_CONVERSATION_DIR")
+	// Existing tests describe the upstream profile. Self-hosted defaults are
+	// covered by tests that set AGENTFLOW_SELF_HOSTED=1 themselves.
+	os.Setenv("AGENTFLOW_SELF_HOSTED", "0")
 	os.Exit(m.Run())
 }

@@ -41,7 +41,13 @@ type assistantEngineInvocationOpts struct {
 	// ReviewOnly is a one-shot call without MCP servers or session history,
 	// such as a title summary.
 	ReviewOnly bool
-	User       runtime.ProviderCredential
+	// ReportOnly keeps the submit-report MCP tool and limits the turn.
+	ReportOnly bool
+	// SubmitOnly disallows repository reads on top of the chat denylist.
+	SubmitOnly bool
+	// WorkDir overrides the CLI working directory. Empty uses Root/ws.
+	WorkDir string
+	User    runtime.ProviderCredential
 }
 
 func assistantEngineConfigDir(engine string) string {
@@ -194,8 +200,10 @@ func prepareAssistantClaudeInvocation(o assistantEngineInvocationOpts) (assistan
 	argv := []string{o.Bin, "-p", "--verbose", "--output-format", "stream-json", "--include-partial-messages",
 		"--max-turns", nativeAssistantUnlimitedTurns, "--system-prompt", o.SystemPrompt,
 		"--mcp-config", mcpPath, "--strict-mcp-config", "--settings", settingsPath, "--setting-sources", "user",
-		"--permission-mode", "bypassPermissions",
-		"--model", o.Model}
+		"--permission-mode", "bypassPermissions"}
+	if model := strings.TrimSpace(o.Model); model != "" && model != "default" {
+		argv = append(argv, "--model", model)
+	}
 	if !o.Workspace {
 		argv = append(argv, "--disallowedTools", claudeAssistantDisallowedTools)
 	}
@@ -204,6 +212,18 @@ func prepareAssistantClaudeInvocation(o assistantEngineInvocationOpts) (assistan
 	}
 	if o.ReviewOnly {
 		argv = append(argv, "--tools", "", "--no-session-persistence")
+	}
+	if o.ReportOnly {
+		for i, arg := range argv {
+			if arg == "--max-turns" && i+1 < len(argv) {
+				argv[i+1] = "6"
+			}
+		}
+		argv = append(argv, "--no-session-persistence")
+		argv = appendDisallowedTools(argv, "Read,Grep,Glob")
+	}
+	if o.SubmitOnly && !o.Workspace {
+		argv = appendDisallowedTools(argv, "Read,Grep,Glob")
 	}
 	if o.Resume {
 		argv = append(argv, "--resume", sessionID)

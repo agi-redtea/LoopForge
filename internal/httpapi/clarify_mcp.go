@@ -24,6 +24,10 @@ var (
 )
 
 func clarifyAllowedModel(id string) string {
+	engine, model := assistantModelEngine(id)
+	if engine != assistantEngineCodeBuddy && assistantValidEngineModel(model) {
+		return strings.TrimSpace(id)
+	}
 	return assistantAllowedModel(id, assistantKnownCatalog())
 }
 
@@ -35,7 +39,14 @@ var errClarifyNeedsCodeBuddy = errors.New("需求澄清目前只支持 CodeBuddy
 // clarifyModelEngineError reports whether id names a model of a CLI that
 // requirement clarification cannot run.
 func clarifyModelEngineError(id string) error {
-	if engine, _ := assistantModelEngine(id); engine != assistantEngineCodeBuddy {
+	engine, model := assistantModelEngine(id)
+	if engine == assistantEngineCodeBuddy || supportedPlatformEngine(engine) {
+		if engine != assistantEngineCodeBuddy && model != "" && !assistantValidEngineModel(model) {
+			return errClarifyNeedsCodeBuddy
+		}
+		return nil
+	}
+	if engine != assistantEngineCodeBuddy {
 		return errClarifyNeedsCodeBuddy
 	}
 	return nil

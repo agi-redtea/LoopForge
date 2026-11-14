@@ -23,8 +23,8 @@ func TestClarifyModelEngineError(t *testing.T) {
 		}
 	}
 	for _, id := range []string{"codex:gpt-5.5", "claude-code:sonnet"} {
-		if err := clarifyModelEngineError(id); err != errClarifyNeedsCodeBuddy {
-			t.Fatalf("model %q = %v, want errClarifyNeedsCodeBuddy", id, err)
+		if err := clarifyModelEngineError(id); err != nil {
+			t.Fatalf("model %q refused: %v", id, err)
 		}
 	}
 }
@@ -43,14 +43,14 @@ func TestChatClarifyRefusesOtherCLIModel(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400: %s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
 	}
-	if !strings.Contains(rec.Body.String(), "只支持 CodeBuddy") {
-		t.Fatalf("error does not explain the CodeBuddy limit: %s", rec.Body.String())
+	if strings.Contains(rec.Body.String(), "只支持 CodeBuddy") {
+		t.Fatalf("codex model still refused: %s", rec.Body.String())
 	}
-	if called {
-		t.Fatal("clarification started with a Codex model")
+	if !called {
+		t.Fatal("clarification did not start with a Codex model")
 	}
 }
 
@@ -65,10 +65,13 @@ func TestRunEvalRefusesOtherCLIModel(t *testing.T) {
 		t.Fatal(err)
 	}
 	rec := cvBRequest(t, f, http.MethodPost, "/api/runs/eval-codex-run/eval", map[string]any{"model": "codex:gpt-5.5"}, true)
-	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "只支持 CodeBuddy") {
-		t.Fatalf("status = %d body = %s, want 400 explaining the CodeBuddy limit", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "Codex") {
+		t.Fatalf("status = %d body = %s, want 400 asking for a Codex key", rec.Code, rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), "只支持 CodeBuddy") {
+		t.Fatalf("codex model still refused as CodeBuddy-only: %s", rec.Body.String())
 	}
 	if _, busy := f.s.ActiveRunEval(done.ID); busy {
-		t.Fatal("a Codex model must not start a run eval")
+		t.Fatal("a Codex model without a Codex key must not start a run eval")
 	}
 }

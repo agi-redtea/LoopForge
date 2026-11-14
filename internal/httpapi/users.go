@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"agentflow/internal/domain"
+	"agentflow/internal/forkconfig"
 	"agentflow/internal/repo"
 
 	"github.com/gin-gonic/gin"
@@ -37,6 +38,10 @@ func (h *usersHandlers) user(c *gin.Context) {
 	}
 	var body repo.UserCredentialUpdate
 	if !decode(c, &body) {
+		return
+	}
+	if !forkconfig.CodeBuddyEnabled() && (strings.TrimSpace(body.CodeBuddyAPIKey) != "" || body.CodeBuddyAPIKeyClear || body.CodeBuddyInternetEnvironment != nil) {
+		c.JSON(http.StatusForbidden, map[string]string{"error": "当前部署已关闭 CodeBuddy"})
 		return
 	}
 	if raw := body.CodeBuddyInternetEnvironment; raw != nil {

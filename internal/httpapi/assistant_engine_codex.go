@@ -189,7 +189,14 @@ func (s *codexAppServer) response(message codexRPCMessage) []string {
 		// App-server builds each thread's hook trust from its own config.
 		// Both the platform guard and workspace approval hook are generated
 		// and reviewed by the platform.
-		params := map[string]any{"model": s.opts.Model, "developerInstructions": s.opts.SystemPrompt, "sandbox": "read-only", "approvalPolicy": "never", "cwd": filepath.Join(s.opts.Root, "ws"), "config": map[string]any{"bypass_hook_trust": true}}
+		cwd := filepath.Join(s.opts.Root, "ws")
+		if strings.TrimSpace(s.opts.WorkDir) != "" {
+			cwd = s.opts.WorkDir
+		}
+		params := map[string]any{"developerInstructions": s.opts.SystemPrompt, "sandbox": "read-only", "approvalPolicy": "never", "cwd": cwd, "config": map[string]any{"bypass_hook_trust": true}}
+		if model := strings.TrimSpace(s.opts.Model); model != "" && model != "default" {
+			params["model"] = model
+		}
 		if s.opts.Workspace {
 			params["sandbox"] = "danger-full-access"
 		}

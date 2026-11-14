@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"agentflow/internal/domain"
+	"agentflow/internal/forkconfig"
 	"agentflow/internal/repo"
 	"github.com/gin-gonic/gin"
 )
@@ -132,9 +133,12 @@ func (h *assistantHandlers) runTaskNow(c *gin.Context) {
 	}
 	user, ok := h.repo.User(current.ID)
 	task, err := loadAssistantTask(h.repo, current.ID, c.Param("id"))
-	engine, _ := assistantModelEngine(task.Model)
+	_, engine := platformTaskModel(user, task.Model)
 	if key, _ := assistantEngineCredential(user, engine); !ok || key == "" {
 		msg := "请先在个人配置中配置自己的 CodeBuddy API Key"
+		if !forkconfig.CodeBuddyEnabled() && engine == assistantEngineCodeBuddy {
+			msg = "请先在个人配置中配置 Codex 或 Claude Code API Key"
+		}
 		if engine != assistantEngineCodeBuddy {
 			msg = assistantEngineMissingKey(engine)
 		}
@@ -229,14 +233,19 @@ func (h *assistantHandlers) executeAssistantTask(ctx context.Context, user domai
 
 	// The task's model picks the CLI; a scheduled run needs the runner's own
 	// key for it (no sponsor), checked before a conversation is opened.
-	engine, _ := assistantModelEngine(task.Model)
+	// An unprefixed CodeBuddy id follows the configured fallback CLI when
+	// CodeBuddy is hidden or the user only has another key.
+	requested, engine := platformTaskModel(user, task.Model)
 	if key, _ := assistantEngineCredential(user, engine); key == "" {
 		if engine != assistantEngineCodeBuddy {
 			return fail(assistantEngineMissingKey(engine))
 		}
+		if !forkconfig.CodeBuddyEnabled() {
+			return fail("请先在个人配置中配置 Codex 或 Claude Code API Key")
+		}
 		return fail("未配置 CodeBuddy API Key")
 	}
-	model, err := scheduledRunModel(ctx, task.Model, user)
+	model, err := scheduledRunModel(ctx, requested, user)
 	if err != nil {
 		return fail(err.Error())
 	}
@@ -432,6 +441,14 @@ func firstNonEmpty(values ...string) string {
 // model list is an in-memory cache that is empty after a restart, so it is
 // refreshed with the owner's key before a model is rejected. A run never
 // silently switches to another, possibly more expensive, model.
+func platformTaskModel(user domain.User, model string) (string, string) {
+	if resolved, err := resolvePlatformModel(user, model); err == nil {
+		model = resolved
+	}
+	engine, _ := assistantModelEngine(model)
+	return model, engine
+}
+
 func scheduledRunModel(ctx context.Context, requested string, user domain.User) (string, error) {
 	requested = strings.TrimSpace(requested)
 	env := user.CodeBuddyInternetEnvironment

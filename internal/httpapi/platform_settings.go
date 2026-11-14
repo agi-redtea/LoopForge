@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"agentflow/internal/domain"
+	"agentflow/internal/forkconfig"
 	"agentflow/internal/repo"
 
 	"github.com/gin-gonic/gin"
@@ -187,6 +188,10 @@ type platformCodeBuddyKeyResponse struct {
 // platformCodeBuddyKey shows and edits the shared CodeBuddy API Key. The key
 // itself is write-only: responses only say whether one is configured.
 func (h *usersHandlers) platformCodeBuddyKey(c *gin.Context) {
+	if !forkconfig.CodeBuddyEnabled() {
+		c.JSON(http.StatusForbidden, gin.H{"error": "当前部署已关闭 CodeBuddy"})
+		return
+	}
 	switch c.Request.Method {
 	case http.MethodGet:
 		if !h.isPlatformAdmin(c.Request) {
