@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"agentflow/internal/domain"
+	"agentflow/internal/forkconfig"
 
 	"github.com/gin-gonic/gin"
 )
@@ -76,6 +77,14 @@ func (h *syncHandlers) syncCreate(c *gin.Context) {
 	}
 	if req.IssueID == "" || req.Target == "" {
 		c.JSON(400, map[string]string{"error": "issueId and target are required"})
+		return
+	}
+	if req.Target == "gongfeng" && !forkconfig.Feature(forkconfig.FeatureGongfeng) {
+		c.JSON(http.StatusForbidden, map[string]string{"error": "当前部署已关闭工蜂"})
+		return
+	}
+	if req.Target == "tapd" && !forkconfig.Feature(forkconfig.FeatureTAPD) {
+		c.JSON(http.StatusForbidden, map[string]string{"error": "当前部署已关闭 TAPD"})
 		return
 	}
 	issue, ok := h.repo.Issue(req.IssueID)

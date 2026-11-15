@@ -22,6 +22,7 @@ import (
 	"agentflow/internal/auth"
 	"agentflow/internal/domain"
 	"agentflow/internal/engine"
+	"agentflow/internal/forkconfig"
 	"agentflow/internal/knowledge"
 	"agentflow/internal/mcpserver"
 	"agentflow/internal/notification"
@@ -755,6 +756,11 @@ func (s *Server) bootstrap(c *gin.Context) {
 	if len(sharedModels) > 0 {
 		sponsoredModel = sharedModels[0]
 	}
+	if !forkconfig.CodeBuddyEnabled() {
+		sponsoredModel = ""
+		sharedModels = nil
+		executors = withoutCodeBuddyExecutors(executors)
+	}
 	c.JSON(200, map[string]any{
 		"businessDomains": businessDomains, "projects": domain.PublicProjects(projects), "repositories": domain.PublicRepositories(repositories),
 		"agents": catalogAgents(agents), "rules": rules, "skills": skills, "mcpServers": mcpServers,
@@ -768,6 +774,7 @@ func (s *Server) bootstrap(c *gin.Context) {
 		// (sponsoredModel is the default).
 		"sponsoredModel":  sponsoredModel,
 		"sponsoredModels": sharedModels,
+		"features":        forkFeaturePayload(),
 	})
 }
 

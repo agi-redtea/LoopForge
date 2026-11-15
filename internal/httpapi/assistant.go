@@ -1042,12 +1042,12 @@ const assistantCommonTailPrompt = assistantModePresentationPrompt + "\n" + `普�
 图片和幻灯片由本平台在当前对话里直接展示。不要调用 LibraryUpload，不要上传到 WorkBuddy 或资料库，不要在回复里放外部查看链接，也不要创建定时任务来生成文件。用户要 PPT 时，在回复中用 slides 代码块按页完整写完，页与页之间单独一行 ---；界面会显示幻灯片并提供可编辑 PowerPoint（.pptx）下载，不是让用户手动复制 Markdown。不要声称已生成本地文件或已上传，下载由界面完成。不要编造积分扣费或未核实的费用。`
 
 func assistantSystemPromptText() string {
-	return strings.Join([]string{
+	return withSelfHostedPromptNote(strings.Join([]string{
 		assistantNativeSystemPrompt,
 		assistantDraftProtocolPrompt,
 		assistantCommonTailPrompt,
 		"可写入的 MCP 工具（仅能放入 drafts）：" + assistantWriteToolNames(),
-	}, "\n")
+	}, "\n"))
 }
 
 // assistantSystemPromptForMode 按审批模式切换写入协议：confirm 走草稿，
@@ -1055,19 +1055,19 @@ func assistantSystemPromptText() string {
 func assistantSystemPromptForMode(mode string) string {
 	switch mode {
 	case AssistantApprovalAuto:
-		return strings.Join([]string{
+		return withSelfHostedPromptNote(strings.Join([]string{
 			assistantNativeSystemPrompt,
 			assistantAutoWriteProtocolPrompt,
 			assistantCommonTailPrompt,
 			"可调用的平台写入工具：" + assistantWriteToolNames(),
-		}, "\n")
+		}, "\n"))
 	case AssistantApprovalAssisted:
-		return strings.Join([]string{
+		return withSelfHostedPromptNote(strings.Join([]string{
 			assistantNativeSystemPrompt,
 			assistantAssistedProtocolPrompt,
 			assistantCommonTailPrompt,
 			"可调用的平台写入工具：" + assistantWriteToolNames(),
-		}, "\n")
+		}, "\n"))
 	default:
 		return assistantSystemPromptText()
 	}
@@ -1382,6 +1382,12 @@ type assistantCLIRequest struct {
 	// OnUsage receives the usage of this CLI invocation once its result event
 	// reports one; the result event covers only this process, not the session.
 	OnUsage func(domain.TokenUsage)
+	// WorkDir is the process working directory. Empty uses the conversation
+	// workspace. Clarification sets it to the repository checkout.
+	WorkDir string
+	// SubmitOnly keeps MCP tools and disallows repository reads, for a
+	// clarification turn that must finish by calling submit_clarification.
+	SubmitOnly bool
 }
 
 func runAssistantCLI(ctx context.Context, req assistantCLIRequest, user domain.User, onEvent func(assistantStreamEvent)) (output string, returnedSessionID string, returnedErr error) {
@@ -1395,7 +1401,10 @@ func runAssistantCLI(ctx context.Context, req assistantCLIRequest, user domain.U
 	engine, engineModel := assistantModelEngine(req.Model)
 	attempt := assistantDiagnosticsFrom(ctx).begin(engine, engineModel, req.Resume, user)
 	defer func() { attempt.finish(returnedErr) }()
-	if engine != assistantEngineCodeBuddy && (req.ReportOnly || (!req.Native && !req.ReviewOnly)) {
+	// Reports and one-shot calls (evals) used to require CodeBuddy. Codex,
+	// Claude Code and the other installed CLIs take the same path; an
+	// unknown engine still returns errAssistantEngineUnsupported.
+	if engine != assistantEngineCodeBuddy && !supportedPlatformEngine(engine) && (req.ReportOnly || (!req.Native && !req.ReviewOnly)) {
 		return "", "", errAssistantEngineUnsupported
 	}
 	var bin string
@@ -1448,7 +1457,10 @@ func runAssistantCLI(ctx context.Context, req assistantCLIRequest, user domain.U
 		sessionID = newAssistantSessionID()
 	}
 	var inv assistantCLIInvocation
-	engineOpts := assistantEngineInvocationOpts{Bin: bin, Root: root, Config: config, Prompt: req.Prompt, Model: engineModel, Effort: req.Effort, SessionID: sessionID, Resume: req.Resume, SystemPrompt: req.SystemPrompt, ReviewOnly: req.ReviewOnly, Workspace: req.Workspace}
+	engineOpts := assistantEngineInvocationOpts{Bin: bin, Root: root, Config: config, Prompt: req.Prompt, Model: engineModel, Effort: req.Effort, SessionID: sessionID, Resume: req.Resume, SystemPrompt: req.SystemPrompt, ReviewOnly: req.ReviewOnly, Workspace: req.Workspace, WorkDir: req.WorkDir, ReportOnly: req.ReportOnly, SubmitOnly: req.SubmitOnly}
+	if engine != assistantEngineCodeBuddy && supportedPlatformEngine(engine) && !req.Native && !req.ReportOnly && !req.ReviewOnly {
+		engineOpts.ReviewOnly = true
+	}
 	switch engine {
 	case assistantEngineClaude:
 		engineOpts.User = runtime.ProviderCredential{APIKey: user.ClaudeCodeAPIKey, BaseURL: user.ClaudeCodeBaseURL}
@@ -1474,6 +1486,9 @@ func runAssistantCLI(ctx context.Context, req assistantCLIRequest, user domain.U
 	}
 	command := inv.command.WithPrivateHomeDir(filepath.Join(root, "home"))
 	workspace := filepath.Join(root, "ws")
+	if strings.TrimSpace(req.WorkDir) != "" {
+		workspace = req.WorkDir
+	}
 	if req.ReportOnly {
 		workspace = reportRoot
 	}

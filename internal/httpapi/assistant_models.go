@@ -223,7 +223,7 @@ func (h *assistantHandlers) models(c *gin.Context) {
 		h.saveCursorCatalog(user)
 		catalog.Engines = assistantEngineOptions(user, shared && strings.TrimSpace(user.CodeBuddyAPIKey) == "")
 	}
-	c.JSON(200, catalog)
+	c.JSON(200, hideCodeBuddyCatalog(catalog))
 }
 
 // assistantChatCatalog is the catalog used by chat conversations: the same

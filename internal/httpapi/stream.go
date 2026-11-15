@@ -413,6 +413,10 @@ func (h *streamHandlers) executeClarify(ctx context.Context, issue domain.Issue,
 	if responsibleErr != nil {
 		return nil, "", nil, responsibleErr
 	}
+	modelID, modelErr := resolvePlatformModel(responsible, request.Model)
+	if modelErr != nil {
+		return nil, "", nil, modelErr
+	}
 	extras := clarifyRequestTexts(request)
 	hydrateClarifyIssueFromText(&issue, extras...)
 	workItemType := "需求"
@@ -475,10 +479,6 @@ func (h *streamHandlers) executeClarify(ctx context.Context, issue domain.Issue,
 	}
 	prompt.WriteString(clarifyRoundBudgetHint(clarifyAssistantRounds(request.History)))
 	prompt.WriteString("\n请基于以上对话继续澄清，只围绕「## 需求」本身，完成后调用 submit_clarification。")
-	cbPath, cbErr := resolveCodeBuddyBin()
-	if cbErr != nil {
-		return nil, "", nil, cbErr
-	}
 	workDir := ""
 	repoInfo := map[string]any{"analyzed": false, "reason": "该 Issue 未绑定代码仓库"}
 	// Resolve the analysis repository list: repositoryIds (multi-repository
@@ -642,7 +642,6 @@ func (h *streamHandlers) executeClarify(ctx context.Context, issue domain.Issue,
 	}
 	userMsg := prompt.String()
 	clarifyID := fmt.Sprintf("clarify-%d", time.Now().UnixNano())
-	modelID := clarifyAllowedModel(request.Model)
 	credentials := runtime.RunCredentials{
 		CodeBuddy: runtime.CodeBuddyCredential{APIKey: strings.TrimSpace(responsible.CodeBuddyAPIKey), InternetEnvironment: strings.TrimSpace(responsible.CodeBuddyInternetEnvironment)},
 		GitToken:  strings.TrimSpace(h.repo.GitCredential(ctx, responsible.ID)),
@@ -666,12 +665,12 @@ func (h *streamHandlers) executeClarify(ctx context.Context, issue domain.Issue,
 	repoInfo["sessionId"] = sessionID
 	emit("open", map[string]any{"repository": repoInfo, "model": modelID, "sessionId": sessionID})
 	emit("thought", map[string]string{"kind": "status", "text": "正在分析需求…"})
-	turnOpts := clarifyTurnOpts{Native: true, MCPConfig: toolFiles.MCPConfig, Settings: toolFiles.Settings}
+	turnOpts := clarifyTurnOpts{Native: true, MCPConfig: toolFiles.MCPConfig, Settings: toolFiles.Settings, User: responsible}
 	jsonRetries := 0
 	var recoveredParsed any
 	var recoveredRaw string
 	for follow := 0; ; follow++ {
-		_, turnRaw, captured, err := h.runClarifyTurn(modelCtx, workDir, cbPath, modelID, turnPrompt, clarifyID, sessionID, homeDir, resume, credentials, emit, turnOpts)
+		_, turnRaw, captured, err := h.runClarifyTurn(modelCtx, workDir, "", modelID, turnPrompt, clarifyID, sessionID, homeDir, resume, credentials, emit, turnOpts)
 		if captured != "" {
 			sessionID = captured
 			repoInfo["sessionId"] = sessionID
@@ -684,7 +683,7 @@ func (h *streamHandlers) executeClarify(ctx context.Context, issue domain.Issue,
 			if turnPrompt != userMsg && !strings.Contains(sessionContext, turnPrompt) {
 				fallbackPrompt = sessionContext + "\n" + turnPrompt
 			}
-			_, turnRaw, captured, err = h.runClarifyTurn(modelCtx, workDir, cbPath, modelID, fallbackPrompt, clarifyID, sessionID, homeDir, false, credentials, emit, turnOpts)
+			_, turnRaw, captured, err = h.runClarifyTurn(modelCtx, workDir, "", modelID, fallbackPrompt, clarifyID, sessionID, homeDir, false, credentials, emit, turnOpts)
 			resume = false
 			if captured != "" {
 				sessionID = captured
@@ -738,6 +737,20 @@ func (h *streamHandlers) rememberClarifySession(issueID, sessionID string, userI
 }
 
 func (h *streamHandlers) runClarifyTurn(ctx context.Context, workDir, cbPath, model, prompt, runID, sessionID, homeDir string, resume bool, credentials runtime.RunCredentials, emit func(event string, payload any), opts clarifyTurnOpts) (any, string, string, error) {
+	if engine, _ := assistantModelEngine(model); engine != assistantEngineCodeBuddy {
+		user := opts.User
+		if user.ID == 0 && credentials.CodeBuddy.APIKey != "" {
+			user.CodeBuddyAPIKey = credentials.CodeBuddy.APIKey
+		}
+		return h.runClarifyTurnOnEngine(ctx, workDir, model, prompt, sessionID, homeDir, resume, user, emit, opts)
+	}
+	if strings.TrimSpace(cbPath) == "" {
+		var err error
+		cbPath, err = resolveCodeBuddyBin()
+		if err != nil {
+			return nil, "", sessionID, err
+		}
+	}
 	command, err := prepareClarifyCommandWith(clarifyCommandOpts{
 		Bin: cbPath, Model: model, Prompt: prompt, RunID: runID, SessionID: sessionID, Resume: resume,
 		Native: opts.Native, MCPConfig: opts.MCPConfig, Settings: opts.Settings, SubmitOnly: opts.SubmitOnly,
@@ -798,6 +811,7 @@ type clarifyTurnOpts struct {
 	Native              bool
 	MCPConfig, Settings string
 	SubmitOnly          bool
+	User                domain.User
 }
 
 // clarifyStreamEvents decodes a single stream-json line into zero or more

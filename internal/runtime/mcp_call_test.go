@@ -18,6 +18,7 @@ func TestMain(m *testing.M) {
 	if RunMCPCallCLI(os.Args[1:]) {
 		return
 	}
+	os.Setenv("AGENTFLOW_SELF_HOSTED", "0")
 	os.Exit(m.Run())
 }
 

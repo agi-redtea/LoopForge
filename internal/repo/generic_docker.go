@@ -82,7 +82,7 @@ func GenericBackendDockerfile() domain.DockerfileDefinition {
 		ProjectID:   "platform",
 		Shared:      true,
 		Description: "通用后端交付 SOP 的默认镜像：git、Node agent CLI 与 Go 工具链。",
-		Content:     genericBackendDockerfileContent,
+		Content:     selfHostedDockerfile(genericBackendDockerfileContent),
 		UpdatedAt:   genericDockerEpoch,
 	}
 }

@@ -13,6 +13,7 @@ import (
 
 	"agentflow/internal/auth"
 	"agentflow/internal/domain"
+	"agentflow/internal/forkconfig"
 	"agentflow/internal/repo"
 	"agentflow/internal/tracker"
 
@@ -40,6 +41,10 @@ type issuesHandlers struct {
 }
 
 func (h issuesHandlers) importTAPD(c *gin.Context) {
+	if !forkconfig.Feature(forkconfig.FeatureTAPD) {
+		c.JSON(http.StatusForbidden, map[string]string{"error": "当前部署已关闭 TAPD"})
+		return
+	}
 	var req struct {
 		ProjectID          string            `json:"projectId"`
 		URL                string            `json:"url"`

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"agentflow/internal/auth"
+	"agentflow/internal/forkconfig"
 
 	"github.com/gin-gonic/gin"
 )
@@ -282,6 +283,10 @@ func (h *authHandlers) authCurrent(c *gin.Context) {
 }
 
 func (h *authHandlers) authExchange(c *gin.Context) {
+	if !forkconfig.Feature(forkconfig.FeatureIOA) {
+		c.JSON(http.StatusForbidden, map[string]string{"error": "当前部署已关闭 iOA 登录"})
+		return
+	}
 	r := c.Request
 	code := strings.TrimSpace(c.Query("code"))
 	if code == "" && r.Method == http.MethodPost {

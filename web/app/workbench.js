@@ -377,6 +377,10 @@ function credentialCatalogAction(action,row,catalog,button){
 }
 // Platform features depend on these, in the order people should configure them.
 const CREDENTIAL_RECOMMENDED=['gitToken','codeBuddyApiKey'];
+function visibleCredentialKinds(){
+  const hidden=typeof window!=='undefined'&&window.AgentFlowAssistantModels?.codeBuddyHidden?.();
+  return hidden?CREDENTIAL_KINDS.filter(kind=>kind.key!=='codeBuddyApiKey'):CREDENTIAL_KINDS;
+}
 const CREDENTIAL_PAT_WARNING='请填写 GitHub <b>个人访问令牌（PAT）</b>，为目标仓库授予 <b>Contents</b> 和 <b>Pull requests</b> 的读写权限；少勾权限会导致克隆 / 推送仓库失败。';
 function credentialKind(key){return CREDENTIAL_KINDS.find(kind=>kind.key===key)||null}
 function credentialConfigured(kind,user){return !!credentialValue(user,kind.agentCli?kind.key+'.apiKeyConfigured':kind.key+'Configured')}
@@ -578,17 +582,17 @@ function credentialRowHTML(kind,user){
   return `<div class="credential-row${on?' is-configured':''}${open?' is-open':''}" data-credential-row="${kind.key}">${credentialRowMainHTML(kind,user)}<div class="credential-editor"><div><div class="credential-editor-inner">${editor}</div></div></div></div>`;
 }
 function credentialGroupHTML(group,user){
-  const kinds=CREDENTIAL_KINDS.filter(kind=>kind.group===group.id),done=kinds.filter(kind=>credentialConfigured(kind,user)).length,closed=!!credentialUI().closed[group.id];
+  const kinds=visibleCredentialKinds().filter(kind=>kind.group===group.id),done=kinds.filter(kind=>credentialConfigured(kind,user)).length,closed=!!credentialUI().closed[group.id];
   return `<section class="credential-group" data-credential-group="${group.id}"><button type="button" class="credential-group-head credential-ink" aria-expanded="${!closed}">${credentialGlyph(group.icon,16)}<strong>${escapeHTML(group.name)}</strong><span class="credential-group-sub">${escapeHTML(group.sub)}</span><span class="credential-group-meta">${done} / ${kinds.length}</span><span class="credential-group-chevron">${credentialGlyph('chevron-down',15)}</span></button><div class="credential-fold${closed?' is-closed':''}"><div><div class="credential-rows">${kinds.map(kind=>credentialRowHTML(kind,user)).join('')}<p class="credential-empty" hidden></p></div></div></div></section>`;
 }
 function credentialProgressHTML(user){
-  const done=CREDENTIAL_KINDS.filter(kind=>credentialConfigured(kind,user)).length,next=credentialNextKind(user);
-  return `<div class="credential-segs" aria-hidden="true">${CREDENTIAL_KINDS.map((_,index)=>`<i${index<done?' class="is-on"':''}></i>`).join('')}</div><span class="credential-count"><b>${done}</b> / ${CREDENTIAL_KINDS.length} 已配置</span>`
+  const kinds=visibleCredentialKinds(),done=kinds.filter(kind=>credentialConfigured(kind,user)).length,next=credentialNextKind(user);
+  return `<div class="credential-segs" aria-hidden="true">${kinds.map((_,index)=>`<i${index<done?' class="is-on"':''}></i>`).join('')}</div><span class="credential-count"><b>${done}</b> / ${kinds.length} 已配置</span>`
     +(next?`<span class="credential-next">下一步<button type="button" class="credential-btn link credential-ink" data-credential-setup="${next.key}">配置 ${escapeHTML(next.short)}<span class="credential-nudge">${credentialGlyph('arrow-right',13)}</span></button></span>`:`<span class="credential-ready">${credentialGlyph('check',15)}推荐凭证已全部就绪</span>`);
 }
 function credentialFilterHTML(user){
-  const done=CREDENTIAL_KINDS.filter(kind=>credentialConfigured(kind,user)).length,filter=credentialUI().filter;
-  return [['all','全部',CREDENTIAL_KINDS.length],['configured','已配置',done],['missing','未配置',CREDENTIAL_KINDS.length-done]].map(([id,label,count])=>`<button type="button" role="tab" data-credential-filter="${id}" class="${filter===id?'active':''}" aria-selected="${filter===id}">${label}<span>${count}</span></button>`).join('');
+  const kinds=visibleCredentialKinds(),done=kinds.filter(kind=>credentialConfigured(kind,user)).length,filter=credentialUI().filter;
+  return [['all','全部',kinds.length],['configured','已配置',done],['missing','未配置',kinds.length-done]].map(([id,label,count])=>`<button type="button" role="tab" data-credential-filter="${id}" class="${filter===id?'active':''}" aria-selected="${filter===id}">${label}<span>${count}</span></button>`).join('');
 }
 function credentialPanelHTML(user){
   return `<header class="credential-section-head"><div><h2>个人凭证</h2><p>SOP 使用需求责任人（未指定时为项目 Owner）的个人凭证，保存后对下一次任务生效。</p></div><button type="button" class="credential-btn primary credential-ink" id="credentialAddButton" data-credential-add><span class="credential-turn">${credentialGlyph('plus',15)}</span><span>添加凭证</span></button></header>
@@ -885,7 +889,7 @@ function openCredentialWizard(key){
   if(key==='gitSshKey')return openGitSSHKeys();
   const preset=key?credentialKind(key):null;
   if(preset&&credentialConfigured(preset,user))return revealCredentialRow(key);
-  const kind=preset||CREDENTIAL_RECOMMENDED.map(credentialKind).find(k=>!credentialConfigured(k,user))||CREDENTIAL_KINDS.find(k=>!credentialConfigured(k,user))||null;
+  const kind=preset||CREDENTIAL_RECOMMENDED.map(credentialKind).filter(Boolean).filter(k=>visibleCredentialKinds().some(item=>item.key===k.key)).find(k=>!credentialConfigured(k,user))||visibleCredentialKinds().find(k=>!credentialConfigured(k,user))||null;
   if(credentialWizard)closeCredentialWizard(true);
   credentialUI().open&&toggleCredentialRow(credentialUI().open,false);
   credentialWizard={step:preset?2:1,kind:kind?.key||null,direct:!!preset,secret:'',extra:credentialWizardDefaults(kind,user),protocol:credentialProtocol(kind||{},user),saving:false,error:'',done:false,guide:{},returnFocus:document.activeElement};
@@ -935,8 +939,8 @@ function credentialWizardSecretHint(kind,wizard,validity=credentialWizardValid(w
   return validity.ok?{text:'格式正确',tone:'ok'}:{text:kind.hint||'只在你负责的任务运行时注入，保存后不再明文展示',tone:''};
 }
 function credentialWizardStepOneHTML(user){
-  const wizard=credentialWizard,all=CREDENTIAL_KINDS.every(kind=>credentialConfigured(kind,user));
-  const groups=CREDENTIAL_GROUPS.map(group=>`<p class="credential-opt-label">${escapeHTML(group.name)}</p><div class="credential-opts" role="radiogroup" aria-label="${escapeHTML(group.name)}">${CREDENTIAL_KINDS.filter(kind=>kind.group===group.id).map((kind,index)=>{
+  const wizard=credentialWizard,all=visibleCredentialKinds().every(kind=>credentialConfigured(kind,user));
+  const groups=CREDENTIAL_GROUPS.map(group=>`<p class="credential-opt-label">${escapeHTML(group.name)}</p><div class="credential-opts" role="radiogroup" aria-label="${escapeHTML(group.name)}">${visibleCredentialKinds().filter(kind=>kind.group===group.id).map((kind,index)=>{
     const on=credentialConfigured(kind,user),selected=wizard.kind===kind.key;
     return `<button type="button" class="credential-opt${selected?' is-selected':''}" style="--i:${index}" role="radio" aria-checked="${selected}" data-wizard-kind="${kind.key}"${on&&kind.key!=='gitSshKey'?' disabled':''}><span class="credential-radio">${credentialGlyph('check',10)}</span>${credentialLogo(kind)}<span class="credential-opt-text"><b>${escapeHTML(kind.name)}</b><small>${escapeHTML(kind.short)}</small></span>${on?'<span class="credential-pill is-ok">已配置</span>':CREDENTIAL_RECOMMENDED.includes(kind.key)?'<span class="credential-pill">推荐</span>':''}</button>`;
   }).join('')}</div>`).join('');
@@ -1200,8 +1204,12 @@ const PLATFORM_TABS=[
   {id:'admins',zh:'平台管理员',en:'Admins'},
   {id:'sharedKey',zh:'共享 CodeBuddy Key',en:'Shared CodeBuddy Key'},
 ];
+function visiblePlatformTabs(){
+  const hidden=typeof window!=='undefined'&&window.AgentFlowAssistantModels?.codeBuddyHidden?.();
+  return hidden?PLATFORM_TABS.filter(t=>t.id!=='sharedKey'):PLATFORM_TABS;
+}
 function platformTabsHTML(active){
-  return `<div class="pa-tabs-wrap platform-tabs-wrap"><div class="pa-tabs platform-tabs" id="platformTabs" role="tablist" aria-label="平台管理分区">${PLATFORM_TABS.map(t=>{
+  return `<div class="pa-tabs-wrap platform-tabs-wrap"><div class="pa-tabs platform-tabs" id="platformTabs" role="tablist" aria-label="平台管理分区">${visiblePlatformTabs().map(t=>{
     const on=t.id===active;
     const extra=t.id==='sharedKey'?'<span class="platform-tab-state" data-platform-tab-state hidden></span>':'<span class="pa-tab-n" data-platform-tab-count hidden></span>';
     return `<button type="button" role="tab" class="pa-tab${on?' on':''}" id="platformTab-${t.id}" data-platform-tab="${t.id}" aria-controls="platformPanel-${t.id}" aria-selected="${on}" tabindex="${on?0:-1}">${lfT(t.zh,t.en)}${extra}</button>`;
@@ -1211,7 +1219,7 @@ function platformTabPanel(id,active,body){
   return `<section class="platform-tab-panel" id="platformPanel-${id}" role="tabpanel" aria-labelledby="platformTab-${id}" data-platform-panel="${id}"${id===active?'':' hidden'}>${body}</section>`;
 }
 function setPlatformTab(host,tab){
-  if(!PLATFORM_TABS.some(t=>t.id===tab))tab=PLATFORM_TABS[0].id;
+  if(!visiblePlatformTabs().some(t=>t.id===tab))tab=visiblePlatformTabs()[0].id;
   state.platformTab=tab;
   host.querySelectorAll('[data-platform-tab]').forEach(b=>{const on=b.dataset.platformTab===tab;b.classList.toggle('on',on);b.setAttribute('aria-selected',String(on));b.tabIndex=on?0:-1});
   host.querySelectorAll('[data-platform-panel]').forEach(p=>{p.hidden=p.dataset.platformPanel!==tab});
@@ -1221,7 +1229,7 @@ function bindPlatformTabs(host){
   bar.querySelectorAll('[data-platform-tab]').forEach(b=>b.onclick=()=>setPlatformTab(host,b.dataset.platformTab));
   bar.onkeydown=e=>{
     if(!['ArrowLeft','ArrowRight'].includes(e.key))return;
-    const ids=PLATFORM_TABS.map(t=>t.id),i=ids.indexOf(state.platformTab),next=ids[(i+(e.key==='ArrowRight'?1:ids.length-1))%ids.length];
+    const ids=visiblePlatformTabs().map(t=>t.id),i=ids.indexOf(state.platformTab),next=ids[(i+(e.key==='ArrowRight'?1:ids.length-1))%ids.length];
     setPlatformTab(host,next);bar.querySelector(`[data-platform-tab="${next}"]`)?.focus();
   };
 }
@@ -1232,7 +1240,7 @@ function setPlatformTabCount(host,tab,n){
 function renderPlatformAdminPanel(){
   const host=$('#platformAdminPanel');if(!host)return;
   if(!isPlatformAdmin()){host.innerHTML='';return}
-  const tab=PLATFORM_TABS.some(t=>t.id===state.platformTab)?state.platformTab:PLATFORM_TABS[0].id;
+  const tab=visiblePlatformTabs().some(t=>t.id===state.platformTab)?state.platformTab:visiblePlatformTabs()[0].id;
   state.platformTab=tab;
   host.innerHTML=`
     ${platformTabsHTML(tab)}
@@ -1366,11 +1374,11 @@ function renderPlatformAdminPanel(){
       </div>
     </div>
     `)}
-    ${platformTabPanel('sharedKey',tab,platformSharedKeyHTML())}
+    ${(typeof window!=='undefined'&&window.AgentFlowAssistantModels?.codeBuddyHidden?.())?'':platformTabPanel('sharedKey',tab,platformSharedKeyHTML())}
   `;
   bindPlatformTabs(host);
   loadPlatformAccounts(host);
-  loadPlatformSharedKey(host);
+  if(!(typeof window!=='undefined'&&window.AgentFlowAssistantModels?.codeBuddyHidden?.()))loadPlatformSharedKey(host);
   loadPlatformAdmins(host);
 }
 

@@ -88,7 +88,19 @@ func TestScheduledTaskRunsOnTaskCLI(t *testing.T) {
 		t.Fatalf("missing claude key = %v %q", err, task.LastError)
 	}
 	task.Model = ""
-	if err := h.executeAssistantTask(context.Background(), user, &task); err == nil || !strings.Contains(task.LastError, "CodeBuddy API Key") {
+	if err := h.executeAssistantTask(context.Background(), user, &task); err != nil {
+		t.Fatalf("empty model falls back to the configured CLI = %v %q", err, task.LastError)
+	}
+	if !strings.HasPrefix(task.Model, assistantEngineCodex+":") {
+		t.Fatalf("empty model resolved = %q", task.Model)
+	}
+
+	bare := domain.User{LoginName: "no-keys"}
+	_ = st.PutUser(bare)
+	bare, _ = st.UserByLoginName("no-keys")
+	task.Model = ""
+	task.SessionID = ""
+	if err := h.executeAssistantTask(context.Background(), bare, &task); err == nil || !strings.Contains(task.LastError, "CodeBuddy API Key") {
 		t.Fatalf("missing codebuddy key = %v %q", err, task.LastError)
 	}
 }

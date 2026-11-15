@@ -18,11 +18,34 @@
     hunyuan:'/images/credentials/hunyuan.svg',
     mimo:'/images/credentials/mimo.svg'
   };
+  const KNOWN_ENGINES = ['codex', 'claude-code', 'claude', 'opencode', 'cursor', 'agy', 'kimi', 'pi', 'dsh', 'zcode', 'codebuddy'];
   let catalog = {
     default: DEFAULT_MODEL,
     models: [{id: DEFAULT_MODEL, name: 'CLI 默认模型', family: 'other'}]
   };
   let loading = null;
+
+  function forkFeatures() {
+    try {
+      if (typeof state !== 'undefined' && state && state.data && state.data.features) return state.data.features;
+    } catch (e) { /* state is not in scope on pages that only load this file */ }
+    try {
+      return window.LoopForgeFeatures || null;
+    } catch (e) {
+      return null;
+    }
+  }
+  function codeBuddyHidden() {
+    const features = forkFeatures();
+    return !!(features && features.codebuddy === false);
+  }
+  function defaultExecutor() {
+    const features = forkFeatures();
+    const id = features && features.defaultExecutor;
+    if (id === 'claude' || id === 'claude-code') return 'claude';
+    if (id === 'codex' || id === 'codebuddy') return id;
+    return codeBuddyHidden() ? 'codex' : 'codebuddy';
+  }
 
   function familyOf(id) {
     const v = String(id || '').toLowerCase();
@@ -45,7 +68,8 @@
     if (listed) return listed.engine || 'codebuddy';
     const value = String(id || '');
     const prefix = value.slice(0, Math.max(0, value.indexOf(':')));
-    return (catalog.engines || []).some(e => e.id === prefix) ? prefix : 'codebuddy';
+    if ((catalog.engines || []).some(e => e.id === prefix) || KNOWN_ENGINES.includes(prefix)) return prefix === 'claude' ? 'claude-code' : prefix;
+    return 'codebuddy';
   }
   function modelMeta(id) {
     return (catalog.models || []).find(m => m.id === id) || {id: id || DEFAULT_MODEL, family: familyOf(id), name: id || DEFAULT_MODEL};
@@ -124,21 +148,49 @@
     renderOptions(menu, catalog.models || [], selectedId, onPick);
   }
   // Requirement clarification, Bot replies, run evals and the SOP preview
-  // build run on CodeBuddy only, so their pickers list CodeBuddy models and
-  // never offer a "codex:…" id the server would have to refuse.
+  // share this picker. It lists every CLI the deployment still offers.
+  // When CodeBuddy is hidden, unprefixed catalog rows (the CodeBuddy list)
+  // drop out and a saved CodeBuddy id falls back to the configured CLI.
   function codeBuddyModels() {
-    return (catalog.models || []).filter(m => (m.engine || 'codebuddy') === 'codebuddy');
+    return (catalog.models || []).filter(m => {
+      const engine = m.engine || 'codebuddy';
+      if (codeBuddyHidden() && engine === 'codebuddy') return false;
+      return true;
+    });
   }
   function renderCodeBuddyList(menu, selectedId, onPick) {
     renderOptions(menu, codeBuddyModels(), selectedId, onPick);
   }
-  // codeBuddyModel keeps a CodeBuddy id and turns an empty id, or a saved id
-  // of another CLI, into the CLI default the server resolves itself.
+  // codeBuddyModel keeps a usable id. An empty id becomes the CLI default.
+  // A prefixed id (codex:, claude-code:) is kept. A CodeBuddy id is kept
+  // unless this deployment has hidden CodeBuddy.
   function codeBuddyModel(id) {
     const value = String(id || '').trim();
-    // The catalog may not have landed yet; the built-in CLI prefixes still count.
-    if (!value || /^(codex|claude-code):/.test(value) || engineOf(value) !== 'codebuddy') return DEFAULT_MODEL;
-    return value;
+    if (!value) return DEFAULT_MODEL;
+    const engine = engineOf(value);
+    if (engine !== 'codebuddy') return value;
+    if (!codeBuddyHidden()) return value;
+    const features = forkFeatures() || {};
+    const executor = features.defaultExecutor === 'claude' || features.defaultExecutor === 'claude-code' ? 'claude-code' : 'codex';
+    const model = String(features.defaultModel || '').trim();
+    return executor + ':' + (model || DEFAULT_MODEL);
+  }
+  function applyForkFeatures(features) {
+    const current = features || forkFeatures();
+    if (!current) return;
+    try { window.LoopForgeFeatures = current; } catch (e) { /* not a browser */ }
+    const root = typeof document === 'undefined' ? null : document;
+    if (!root || !root.querySelectorAll) return;
+    // WeCom stays in the nav unless this deployment set features.wecom to false.
+    root.querySelectorAll('[data-view="bots"]').forEach(el => { el.hidden = current.wecom === false; });
+    root.querySelectorAll('[data-legacy-tracker]').forEach(el => {
+      const blob = `${el.id || ''} ${el.textContent || ''}`;
+      const tapd = /tapd/i.test(blob);
+      const gongfeng = /gongfeng|工蜂/i.test(blob);
+      if (tapd && current.tapd === true) { el.hidden = false; if ('disabled' in el) el.disabled = false; }
+      if (gongfeng && current.gongfeng === true) { el.hidden = false; if ('disabled' in el) el.disabled = false; }
+    });
+    root.querySelectorAll('[data-asset-scope="skillhub"]').forEach(el => { el.hidden = current.skillhub !== true; });
   }
   async function fetchCatalog() {
     const resp = await fetch('/api/assistant/models', {headers: {Accept: 'application/json'}, credentials: 'same-origin'});
@@ -161,6 +213,10 @@
     catalog: () => catalog,
     codeBuddyModel,
     codeBuddyModels,
+    codeBuddyHidden,
+    defaultExecutor,
+    applyForkFeatures,
+    forkFeatures,
     engineOf,
     load,
     paint,

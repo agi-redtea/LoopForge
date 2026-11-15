@@ -52,6 +52,13 @@ function storedExecutor() {
     return "codebuddy";
   }
 }
+function preferredExecutor(listed) {
+  const stored = storedExecutor();
+  if (!listed || listed.includes(stored)) return stored;
+  if (listed.includes("codex")) return "codex";
+  if (listed.includes("claude-code")) return "claude-code";
+  return listed[0] || stored;
+}
 
 // Mirrors errAssistantSponsoredModel in internal/httpapi/assistant_sponsor.go;
 // credentialHint turns it into a "去配置" button.
@@ -100,6 +107,7 @@ export function useChat() {
     [effort, setEffort] = useState(""),
     [sponsoredModels, setSponsoredModels] = useState([]),
     [executor, setExecutorState] = useState(storedExecutor),
+    [listedEngines, setListedEngines] = useState(null),
     [providerCatalogs, setProviderCatalogs] = useState({}),
     [generation, setGeneration] = useState(null),
     [stopRequest, setStopRequest] = useState(null),
@@ -222,6 +230,11 @@ export function useChat() {
         defaultModel.current = catalog.default || "";
         setSponsoredModels(sponsoredModelList(catalog));
         setModel(catalog.default);
+        if (Array.isArray(catalog.engines) && catalog.engines.length) {
+          const ids = catalog.engines.map((item) => item.id).filter(Boolean);
+          setListedEngines(ids);
+          setExecutorState((prev) => (ids.includes(prev) ? prev : preferredExecutor(ids)));
+        }
         await refreshSessions();
         if (!current) return;
         const recovered = connectionError;
@@ -1233,7 +1246,7 @@ export function useChat() {
     selectSandbox,
     models: executorModels,
     executor,
-    executors: EXECUTORS,
+    executors: listedEngines ? EXECUTORS.filter((item) => listedEngines.includes(item.id)) : EXECUTORS,
     setExecutor: chooseExecutor,
     sessions,
     session,
