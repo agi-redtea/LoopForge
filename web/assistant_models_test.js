@@ -135,5 +135,20 @@ vm.runInContext(moduleSource, ctx);
   ctx.window.LoopForgeFeatures = {codebuddy: false, defaultExecutor: 'codex'};
   assert.deepEqual(api.codeBuddyModels().map(m => m.id), ['codex:gpt-5.5']);
   assert.equal(api.codeBuddyModel('model-a'), 'codex:default');
+
+  const bots = createElement('button');
+  bots.setAttribute('data-view', 'bots');
+  const skillhub = createElement('button');
+  skillhub.setAttribute('data-asset-scope', 'skillhub');
+  ctx.document.querySelectorAll = selector => {
+    if (selector === '[data-view="bots"]') return [bots];
+    if (selector === '[data-asset-scope="skillhub"]') return [skillhub];
+    return [];
+  };
+  api.applyForkFeatures({codebuddy: false, wecom: true, skillhub: false, tapd: false, gongfeng: false});
+  assert.equal(bots.hidden, false, 'WeCom nav stays visible when the feature is on');
+  assert.equal(skillhub.hidden, true, 'SkillHub stays hidden in the self-hosted profile');
+  api.applyForkFeatures({wecom: false});
+  assert.equal(bots.hidden, true, 'WeCom nav hides only when the switch is off');
   console.log('assistant models ok');
 })().catch(err => { console.error(err); process.exit(1); });

@@ -1,6 +1,6 @@
 # 自托管构建说明
 
-这个仓库是 [Tencent/LoopForge](https://github.com/Tencent/LoopForge) 的公开 fork，默认按「没有 CodeBuddy 账号、不接腾讯内网」来跑。上游代码都还在，靠下面的开关关掉。想恢复上游行为，设 `AGENTFLOW_SELF_HOSTED=0`，或者只打开需要的那几项。
+这个仓库是 [Tencent/LoopForge](https://github.com/Tencent/LoopForge) 的公开 fork，默认按「没有 CodeBuddy 账号、不接腾讯内网」来跑，企业微信通知保留。上游代码都还在，靠下面的开关关掉。想恢复上游行为，设 `AGENTFLOW_SELF_HOSTED=0`，或者只打开需要的那几项。
 
 改动都是加开关和薄封装，没有删上游路径。合 upstream `main` 时优先保留这些新文件，再处理上游文件上的小改动。
 
@@ -20,21 +20,23 @@
 
 ## 腾讯集成
 
-每一项都是：`AGENTFLOW_ENABLE_<NAME>=1` 打开，`AGENTFLOW_DISABLE_<NAME>=1` 关掉，否则跟随 `AGENTFLOW_SELF_HOSTED`（自托管默认关）。`LOOPFORGE_ENABLE_*` / `LOOPFORGE_DISABLE_*` 同样生效，DISABLE 优先。
+iOA、工蜂、TAPD、SkillHub：`AGENTFLOW_ENABLE_<NAME>=1` 打开，`AGENTFLOW_DISABLE_<NAME>=1` 关掉，否则跟随 `AGENTFLOW_SELF_HOSTED`（自托管默认关）。`LOOPFORGE_ENABLE_*` / `LOOPFORGE_DISABLE_*` 同样生效，DISABLE 优先。
 
-| NAME | 关掉之后 |
-|---|---|
-| `IOA` | `/api/auth/exchange` 返回 403，不访问 iOA |
-| `GONGFENG` | 工蜂 OAuth 状态为未启用，开始授权返回 403；同步不再拉工蜂 issue |
-| `TAPD` | 导入 / 重新同步 TAPD 返回 403；同步不再拉 TAPD |
-| `SKILLHUB` | `/api/skillhub/*` 返回 403，不会请求市场 |
-| `WECOM` | 不能新建或修改企业微信机器人（403），导航里的「通道管理」隐藏 |
+企业微信是例外：自托管默认开着。`AGENTFLOW_DISABLE_WECOM=1`（或 `LOOPFORGE_DISABLE_WECOM=1`）才关掉。
+
+| NAME | 自托管默认 | 关掉之后 |
+|---|---|---|
+| `IOA` | 关 | `/api/auth/exchange` 返回 403，不访问 iOA |
+| `GONGFENG` | 关 | 工蜂 OAuth 状态为未启用，开始授权返回 403；同步不再拉工蜂 issue |
+| `TAPD` | 关 | 导入 / 重新同步 TAPD 返回 403；同步不再拉 TAPD |
+| `SKILLHUB` | 关 | `/api/skillhub/*` 返回 403，不会请求市场 |
+| `WECOM` | 开 | 不能新建或修改企业微信机器人（403），导航里的「通道管理」隐藏 |
 
 `AGENTFLOW_SKILLHUB_URL`（或 `LOOPFORGE_SKILLHUB_URL`）覆盖市场地址，优先于原来的 `SKILLHUB_BASE_URL`。留空时客户端仍用历史上的 `https://api.skillhub.cn`，但自托管默认不会去连。
 
 界面：TAPD / 工蜂入口本来就带 `data-legacy-tracker` 且默认隐藏，只有对应开关打开才显示。SkillHub 市场按钮同理。CodeBuddy 隐藏后，个人凭证里的 CodeBuddy 卡片和「共享 CodeBuddy Key」页签不再出现。
 
-自托管时，澄清和助手的系统提示末尾会加一句：不要假设 TAPD、工蜂、iOA、企业微信或 CodeBuddy。种子 SQL 里的模板正文没有改（旧迁移不回写），这段运行时说明盖住那些假设。
+自托管时，澄清和助手的系统提示末尾会加一句：不要假设 TAPD、工蜂、iOA 或 CodeBuddy，企业微信通知可以配置。种子 SQL 里的模板正文没有改（旧迁移不回写），这段运行时说明盖住那些假设。
 
 ## 执行器、密钥和 Base URL
 
@@ -82,5 +84,5 @@ docker build --build-arg LOOPFORGE_INSTALL_CODEBUDDY=1 .
 
 - 种子模板正文里仍可能提到 TAPD / 工蜂。运行时提示会补一句自托管说明，正文本身留着，方便以后打开那些集成。
 - 源码里的腾讯主机名（`copilot.tencent.com`、`api.skillhub.cn`、工蜂常量）还在，关掉开关后不会去连。
-- 企业微信只挡住了保存机器人和导航入口。已经配好的机器人进程代码还在，打开 `WECOM` 就能用。
+- 企业微信默认可用。`AGENTFLOW_DISABLE_WECOM=1` 时，保存机器人返回 403，导航里的「通道管理」隐藏；机器人进程代码仍在。
 - 数据库里已经存下来的沙箱 Dockerfile 不会被 032 改写。新环境用自托管构建逻辑；旧行要换镜像的话，在环境设置里更新 Dockerfile，或重新生成内置行。

@@ -87,7 +87,9 @@ func DefaultModel() string {
 
 // Feature reports whether a Tencent integration is available.
 // AGENTFLOW_ENABLE_<NAME>=1 forces it on, AGENTFLOW_DISABLE_<NAME>=1 forces
-// it off, and otherwise it follows the self-hosted profile (off).
+// it off. Otherwise iOA, Gongfeng, TAPD and SkillHub follow the self-hosted
+// profile (off). Enterprise WeChat stays on in that profile; turn it off
+// with AGENTFLOW_DISABLE_WECOM=1 (LOOPFORGE_DISABLE_WECOM works too).
 func Feature(name string) bool {
 	key := featureKey(name)
 	if key == "" {
@@ -97,6 +99,9 @@ func Feature(name string) bool {
 		return false
 	}
 	if envTrue("AGENTFLOW_ENABLE_"+key) || envTrue("LOOPFORGE_ENABLE_"+key) {
+		return true
+	}
+	if strings.EqualFold(strings.TrimSpace(name), FeatureWeCom) {
 		return true
 	}
 	return !SelfHosted()
@@ -115,7 +120,7 @@ func PromptNote() string {
 	if !SelfHosted() {
 		return ""
 	}
-	return "自托管环境：不要假设 TAPD、工蜂、iOA、企业微信或 CodeBuddy 可用。代码仓库按用户配置的 Git（通常是 GitHub）处理；模型请求走该用户在个人配置里保存的 Base URL 和 API Key。"
+	return "自托管环境：不要假设 TAPD、工蜂、iOA 或 CodeBuddy 可用。企业微信通知可以配置。代码仓库按用户配置的 Git（通常是 GitHub）处理；模型请求走该用户在个人配置里保存的 Base URL 和 API Key。"
 }
 
 // MapStockExecutor rewrites the upstream CodeBuddy default on stock catalog

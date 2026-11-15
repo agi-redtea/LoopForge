@@ -10,8 +10,10 @@ func TestSelfHostedDefaults(t *testing.T) {
 	t.Setenv("AGENTFLOW_DEFAULT_EXECUTOR", "")
 	t.Setenv("AGENTFLOW_ENABLE_TAPD", "")
 	t.Setenv("AGENTFLOW_DISABLE_TAPD", "")
-	if !SelfHosted() || CodeBuddyEnabled() || Feature(FeatureTAPD) || Feature(FeatureIOA) {
-		t.Fatalf("self-hosted defaults: hosted=%v codebuddy=%v tapd=%v ioa=%v", SelfHosted(), CodeBuddyEnabled(), Feature(FeatureTAPD), Feature(FeatureIOA))
+	t.Setenv("AGENTFLOW_DISABLE_WECOM", "")
+	t.Setenv("LOOPFORGE_DISABLE_WECOM", "")
+	if !SelfHosted() || CodeBuddyEnabled() || Feature(FeatureTAPD) || Feature(FeatureIOA) || Feature(FeatureGongfeng) || Feature(FeatureSkillHub) || !Feature(FeatureWeCom) {
+		t.Fatalf("self-hosted defaults: hosted=%v codebuddy=%v tapd=%v ioa=%v gongfeng=%v skillhub=%v wecom=%v", SelfHosted(), CodeBuddyEnabled(), Feature(FeatureTAPD), Feature(FeatureIOA), Feature(FeatureGongfeng), Feature(FeatureSkillHub), Feature(FeatureWeCom))
 	}
 	if DefaultExecutor() != "codex" || DefaultEngine() != "codex" {
 		t.Fatalf("default executor = %s / %s, want codex", DefaultExecutor(), DefaultEngine())
@@ -50,6 +52,11 @@ func TestExplicitSwitchesOverrideProfile(t *testing.T) {
 	t.Setenv("AGENTFLOW_DEFAULT_EXECUTOR", "claude-code")
 	if !CodeBuddyEnabled() || DefaultExecutor() != "claude" || DefaultEngine() != "claude-code" {
 		t.Fatalf("enable codebuddy with claude default: enabled=%v executor=%s engine=%s", CodeBuddyEnabled(), DefaultExecutor(), DefaultEngine())
+	}
+	t.Setenv("AGENTFLOW_ENABLE_CODEBUDDY", "")
+	t.Setenv("LOOPFORGE_DISABLE_WECOM", "1")
+	if Feature(FeatureWeCom) {
+		t.Fatal("LOOPFORGE_DISABLE_WECOM should turn WeCom off in the self-hosted profile")
 	}
 }
 

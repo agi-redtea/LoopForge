@@ -181,6 +181,7 @@
     try { window.LoopForgeFeatures = current; } catch (e) { /* not a browser */ }
     const root = typeof document === 'undefined' ? null : document;
     if (!root || !root.querySelectorAll) return;
+    // WeCom stays in the nav unless this deployment set features.wecom to false.
     root.querySelectorAll('[data-view="bots"]').forEach(el => { el.hidden = current.wecom === false; });
     root.querySelectorAll('[data-legacy-tracker]').forEach(el => {
       const blob = `${el.id || ''} ${el.textContent || ''}`;

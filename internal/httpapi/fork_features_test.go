@@ -24,6 +24,8 @@ func TestSelfHostedBootstrapHidesCodeBuddyAndTencentFeatures(t *testing.T) {
 	t.Setenv("AGENTFLOW_ENABLE_TAPD", "")
 	t.Setenv("AGENTFLOW_ENABLE_SKILLHUB", "")
 	t.Setenv("AGENTFLOW_ENABLE_WECOM", "")
+	t.Setenv("AGENTFLOW_DISABLE_WECOM", "")
+	t.Setenv("LOOPFORGE_DISABLE_WECOM", "")
 
 	root := t.TempDir()
 	s, err := repo.OpenTest()
@@ -47,7 +49,7 @@ func TestSelfHostedBootstrapHidesCodeBuddyAndTencentFeatures(t *testing.T) {
 	if err := json.Unmarshal(bootRec.Body.Bytes(), &boot); err != nil {
 		t.Fatal(err)
 	}
-	if boot.Features["codebuddy"] != false || boot.Features["tapd"] != false || boot.Features["selfHosted"] != true {
+	if boot.Features["codebuddy"] != false || boot.Features["tapd"] != false || boot.Features["gongfeng"] != false || boot.Features["skillhub"] != false || boot.Features["ioa"] != false || boot.Features["wecom"] != true || boot.Features["selfHosted"] != true {
 		t.Fatalf("features = %#v", boot.Features)
 	}
 	if boot.Features["defaultExecutor"] != "codex" {
@@ -87,7 +89,16 @@ func TestSelfHostedBootstrapHidesCodeBuddyAndTencentFeatures(t *testing.T) {
 	botReq := httptest.NewRequest(http.MethodPost, "/api/notification-bots", strings.NewReader(`{"projectId":"platform","name":"n","botId":"b","secret":"s","enabled":true}`))
 	botReq.Header.Set("Content-Type", "application/json")
 	h.ServeHTTP(bot, botReq)
-	if bot.Code != http.StatusForbidden {
-		t.Fatalf("wecom bot = %d %s", bot.Code, bot.Body.String())
+	if bot.Code == http.StatusForbidden || strings.Contains(bot.Body.String(), "当前部署已关闭企业微信通知") {
+		t.Fatalf("wecom stays available in the self-hosted profile: %d %s", bot.Code, bot.Body.String())
+	}
+
+	t.Setenv("AGENTFLOW_DISABLE_WECOM", "1")
+	closed := httptest.NewRecorder()
+	closedReq := httptest.NewRequest(http.MethodPost, "/api/notification-bots", strings.NewReader(`{"projectId":"platform","name":"n","botId":"b","secret":"s","enabled":true}`))
+	closedReq.Header.Set("Content-Type", "application/json")
+	h.ServeHTTP(closed, closedReq)
+	if closed.Code != http.StatusForbidden || !strings.Contains(closed.Body.String(), "当前部署已关闭企业微信通知") {
+		t.Fatalf("disabled wecom = %d %s", closed.Code, closed.Body.String())
 	}
 }
